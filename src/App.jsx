@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import {
   Plus, X, Flame, Trophy, Loader2, ChevronLeft, ChevronRight,
-  ListChecks, BarChart3, Check,
+  ListChecks, BarChart3, Check, Download, Share,
 } from "lucide-react";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -84,6 +84,48 @@ export default function GrowthTrackerMobile() {
   const [bannerDismissed, setBannerDismissed] = useState(false);
   const [userName, setUserName] = useState(null);
   const [nameInput, setNameInput] = useState("");
+
+  // --- install prompt (PWA) ---
+  const [deferredPrompt, setDeferredPrompt] = useState(null);
+  const [showInstallBanner, setShowInstallBanner] = useState(false);
+  const [isIOS, setIsIOS] = useState(false);
+
+  useEffect(() => {
+    const alreadyDismissed = window.localStorage.getItem("install-banner-dismissed");
+    const isStandalone =
+      window.matchMedia?.("(display-mode: standalone)").matches || window.navigator.standalone;
+    if (isStandalone || alreadyDismissed) return;
+
+    const ua = window.navigator.userAgent.toLowerCase();
+    const ios = /iphone|ipad|ipod/.test(ua) && !window.MSStream;
+    setIsIOS(ios);
+    if (ios) {
+      setShowInstallBanner(true);
+      return;
+    }
+
+    const handler = (e) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      setShowInstallBanner(true);
+    };
+    window.addEventListener("beforeinstallprompt", handler);
+    return () => window.removeEventListener("beforeinstallprompt", handler);
+  }, []);
+
+  const dismissInstallBanner = () => {
+    setShowInstallBanner(false);
+    window.localStorage.setItem("install-banner-dismissed", "true");
+  };
+
+  const handleInstallClick = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    await deferredPrompt.userChoice;
+    setDeferredPrompt(null);
+    setShowInstallBanner(false);
+    window.localStorage.setItem("install-banner-dismissed", "true");
+  };
 
   const [viewYear, setViewYear] = useState(todayObj.getFullYear());
   const [viewMonth, setViewMonth] = useState(todayObj.getMonth()); // 0-indexed
@@ -382,6 +424,36 @@ export default function GrowthTrackerMobile() {
 
       {/* content */}
       <div className="flex-1 overflow-y-auto px-5 pb-4" style={{ minHeight: 420 }}>
+        {showInstallBanner && (
+          <div
+            style={{ background: INK, color: PAPER }}
+            className="rounded-2xl px-4 py-3 mb-4 flex items-center gap-3"
+          >
+            {isIOS ? (
+              <>
+                <Share size={16} color={GOLD} className="shrink-0" />
+                <p className="text-xs flex-1">
+                  Install this app: tap the Share icon, then "Add to Home Screen".
+                </p>
+              </>
+            ) : (
+              <>
+                <Download size={16} color={GOLD} className="shrink-0" />
+                <p className="text-xs flex-1">Install this app for quick access, right from your home screen.</p>
+                <button
+                  onClick={handleInstallClick}
+                  style={{ background: GOLD, color: INK }}
+                  className="shrink-0 text-xs font-medium px-3 py-1.5 rounded-lg"
+                >
+                  Install
+                </button>
+              </>
+            )}
+            <button onClick={dismissInstallBanner} aria-label="Dismiss install prompt" className="shrink-0">
+              <X size={14} color={PAPER} />
+            </button>
+          </div>
+        )}
         {showReminder && (
           <div
             style={{ background: GOLD + "1f", border: `1px solid ${GOLD}55` }}
