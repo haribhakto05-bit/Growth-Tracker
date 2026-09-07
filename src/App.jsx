@@ -18,7 +18,6 @@ const DEFAULT_HABITS = [
   { id: "h3", name: "30 Pushups" },
   { id: "h4", name: "2-3 Liter's Water" },
   { id: "h5", name: "3 Mala" },
-  { id: "h6", name: "No Masturbation" },
 ];
 
 const INK = "#232A1F";
