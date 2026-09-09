@@ -463,7 +463,7 @@ export default function GrowthTrackerMobile() {
         `}</style>
         <Flame size={26} color={GOLD} className="mb-3" />
         <h1 style={{ fontFamily: "'Fraunces', serif", fontWeight: 600 }} className="text-2xl mb-2">
-          Welcome to your growth log
+          Welcome to Hitlist
         </h1>
         <p style={{ color: MUTED }} className="text-sm mb-6">What should we call you?</p>
         <input
@@ -531,7 +531,7 @@ export default function GrowthTrackerMobile() {
           <div>
             {userName && <p style={{ color: MUTED }} className="text-xs mb-0.5">Hey, {userName}</p>}
             <h1 style={{ fontFamily: "'Fraunces', serif", fontWeight: 600 }} className="text-2xl">
-              Growth log
+              Hitlist
             </h1>
           </div>
           <div className="flex gap-4">
