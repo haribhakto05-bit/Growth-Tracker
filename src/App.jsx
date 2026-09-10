@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import {
   Plus, X, Flame, Trophy, Loader2, ChevronLeft, ChevronRight,
-  ListChecks, BarChart3, Check, Target, Settings, Download, Share,
+  ListChecks, BarChart3, Check, Target, Settings,
 } from "lucide-react";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -96,48 +96,6 @@ export default function GrowthTrackerMobile() {
   const [goalDeadlineInput, setGoalDeadlineInput] = useState("");
   const [showQuotePopup, setShowQuotePopup] = useState(false);
 
-  // --- install prompt (PWA) ---
-  const [deferredPrompt, setDeferredPrompt] = useState(null);
-  const [showInstallBanner, setShowInstallBanner] = useState(false);
-  const [isIOS, setIsIOS] = useState(false);
-
-  useEffect(() => {
-    const alreadyDismissed = window.localStorage.getItem("install-banner-dismissed");
-    const isStandalone =
-      window.matchMedia?.("(display-mode: standalone)").matches || window.navigator.standalone;
-    if (isStandalone || alreadyDismissed) return;
-
-    const ua = window.navigator.userAgent.toLowerCase();
-    const ios = /iphone|ipad|ipod/.test(ua) && !window.MSStream;
-    setIsIOS(ios);
-    if (ios) {
-      setShowInstallBanner(true);
-      return;
-    }
-
-    const handler = (e) => {
-      e.preventDefault();
-      setDeferredPrompt(e);
-      setShowInstallBanner(true);
-    };
-    window.addEventListener("beforeinstallprompt", handler);
-    return () => window.removeEventListener("beforeinstallprompt", handler);
-  }, []);
-
-  const dismissInstallBanner = () => {
-    setShowInstallBanner(false);
-    window.localStorage.setItem("install-banner-dismissed", "true");
-  };
-
-  const handleInstallClick = async () => {
-    if (!deferredPrompt) return;
-    deferredPrompt.prompt();
-    await deferredPrompt.userChoice;
-    setDeferredPrompt(null);
-    setShowInstallBanner(false);
-    window.localStorage.setItem("install-banner-dismissed", "true");
-  };
-
   const [viewYear, setViewYear] = useState(todayObj.getFullYear());
   const [viewMonth, setViewMonth] = useState(todayObj.getMonth());
   const [selectedDay, setSelectedDay] = useState(todayObj.getDate());
@@ -147,38 +105,54 @@ export default function GrowthTrackerMobile() {
   const dayRefs = useRef({});
 
   useEffect(() => {
-    try {
-      const raw = window.localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (parsed.habits && parsed.data) {
-          setHabits(parsed.habits);
-          setData(parsed.data);
+    (async () => {
+      try {
+        const res = await window.storage.get(STORAGE_KEY, false);
+        if (res && res.value) {
+          const parsed = JSON.parse(res.value);
+          if (parsed.habits && parsed.data) {
+            setHabits(parsed.habits);
+            setData(parsed.data);
+          }
+          if (parsed.extraTasks) setExtraTasks(parsed.extraTasks);
+          if (parsed.goal) setGoal(parsed.goal);
         }
-        if (parsed.extraTasks) setExtraTasks(parsed.extraTasks);
-        if (parsed.goal) setGoal(parsed.goal);
+      } catch (e) {
+        // first run — keep defaults from the uploaded sheet
       }
-    } catch (e) {
-      // first run — keep defaults from the uploaded sheet
-    }
-    try {
-      const name = window.localStorage.getItem(NAME_KEY);
-      if (name) setUserName(name);
-    } catch (e) {
-      // no name saved yet
-    } finally {
-      setLoaded(true);
-    }
+      try {
+        const nameRes = await window.storage.get(NAME_KEY, false);
+        if (nameRes && nameRes.value) setUserName(nameRes.value);
+      } catch (e) {
+        // no name saved yet
+      } finally {
+        setLoaded(true);
+      }
+    })();
   }, []);
 
-  // keep the highlighted date scrolled into view — fixes arrow taps looking "stuck"
+  // keep the highlighted date scrolled into view — including on first load,
+  // where layout isn't ready yet, so we wait two frames before scrolling
+  const didInitialScroll = useRef(false);
   useEffect(() => {
-    const el = dayRefs.current[selectedDay];
-    if (el) el.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+    const id = requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        const el = dayRefs.current[selectedDay];
+        if (el) {
+          el.scrollIntoView({
+            behavior: didInitialScroll.current ? "smooth" : "auto",
+            inline: "center",
+            block: "nearest",
+          });
+          didInitialScroll.current = true;
+        }
+      })
+    );
+    return () => cancelAnimationFrame(id);
   }, [selectedDay, viewMonth, viewYear]);
 
   const persistAll = useCallback(
-    (overrides = {}) => {
+    async (overrides = {}) => {
       const payload = {
         habits: overrides.habits ?? habits,
         data: overrides.data ?? data,
@@ -186,8 +160,8 @@ export default function GrowthTrackerMobile() {
         goal: overrides.goal !== undefined ? overrides.goal : goal,
       };
       try {
-        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
-        setSaveError(false);
+        const result = await window.storage.set(STORAGE_KEY, JSON.stringify(payload), false);
+        setSaveError(!result);
       } catch (e) {
         setSaveError(true);
       }
@@ -195,11 +169,11 @@ export default function GrowthTrackerMobile() {
     [habits, data, extraTasks, goal]
   );
 
-  const saveName = () => {
+  const saveName = async () => {
     const name = nameInput.trim();
     if (!name) return;
     try {
-      window.localStorage.setItem(NAME_KEY, name);
+      await window.storage.set(NAME_KEY, name, false);
     } catch (e) {
       // continue anyway — not critical
     }
@@ -563,7 +537,7 @@ export default function GrowthTrackerMobile() {
                   </span>
                 </div>
                 <div className="flex gap-3 mt-1.5">
-                  <button onClick={openGoalEditor} style={{ color: MUTED }} className="text-[10px] underline">Edit</button>
+                  <button onClick={startNewGoal} style={{ color: MUTED }} className="text-[10px] underline">Set new goal</button>
                   <button onClick={reopenGoal} style={{ color: MUTED }} className="text-[10px] underline">Not done yet</button>
                 </div>
               </div>
@@ -636,27 +610,6 @@ export default function GrowthTrackerMobile() {
 
       {/* content */}
       <div className="flex-1 overflow-y-auto px-5 pb-4">
-        {showInstallBanner && (
-          <div style={{ background: INK, color: PAPER }} className="rounded-2xl px-4 py-3 mb-4 flex items-center gap-3">
-            {isIOS ? (
-              <>
-                <Share size={16} color={GOLD} className="shrink-0" />
-                <p className="text-xs flex-1">Install this app: tap the Share icon, then "Add to Home Screen".</p>
-              </>
-            ) : (
-              <>
-                <Download size={16} color={GOLD} className="shrink-0" />
-                <p className="text-xs flex-1">Install this app for quick access, right from your home screen.</p>
-                <button onClick={handleInstallClick} style={{ background: GOLD, color: INK }} className="shrink-0 text-xs font-medium px-3 py-1.5 rounded-lg">
-                  Install
-                </button>
-              </>
-            )}
-            <button onClick={dismissInstallBanner} aria-label="Dismiss install prompt" className="shrink-0">
-              <X size={14} color={PAPER} />
-            </button>
-          </div>
-        )}
         {showReminder && (
           <div style={{ background: GOLD + "1f", border: `1px solid ${GOLD}55` }} className="rounded-2xl px-4 py-3 mb-4 flex items-center gap-3">
             <Flame size={16} color={GOLD} className="shrink-0" />
